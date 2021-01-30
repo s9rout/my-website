@@ -3,13 +3,15 @@ title: Set My Website
 date: 2021-01-28 21:18:35
 tags:
 - instrution
-comments: true
 ---
 
 
 ---
+
+<!--more-->
 
 #How To Set A Website
+
 * ___初始化___
 
 1.创建一个新的文件夹，在终端使用指令`$ hexo init [folder]`.

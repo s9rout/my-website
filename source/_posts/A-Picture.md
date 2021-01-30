@@ -7,4 +7,6 @@ tags:
 
 ---
 
+<!--more-->
+
 ![Miku](/images/Miku.jpg)
