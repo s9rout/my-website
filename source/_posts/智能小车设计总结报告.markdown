@@ -18,6 +18,7 @@ tags:
 >>蓝牙使用HC-05蓝牙模块[^2 ：  https://mbb.eet-china.com/forum/topic/57581_1_1.html] 与小车进行串口通信
 
 <h2>设计过程中遇到的问题</h2>
+
 ### 1.数码管焊接
 
 最初设计使用HC74595模块驱动数码管[^3 ：   https://bbs.elecfans.com/m/jishu_2135156_1_1.html] 显示，如下图
