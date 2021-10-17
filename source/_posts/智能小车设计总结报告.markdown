@@ -1,0 +1,199 @@
+---
+title: 智能小车小车总结报告
+date: 2021-10-17 15:20:13
+tags:
+ - Report
+---
+
+---
+
+<!--more-->
+
+# 智能小车制作总结报告
+
+## 设计思路
+>小车基于stm32f103vet6开发板设计，具有行进、测速、~~红外循迹~~、蓝牙控制等功能。
+>>测速功能采用槽型光耦测速模块[^1 ：   https://blog.csdn.net/p_xiaojia/article/details/79313242] 实现
+>>~~红外循迹使用两个TCRT5000循迹模块~~
+>>蓝牙使用HC-05蓝牙模块[^2 ：  https://mbb.eet-china.com/forum/topic/57581_1_1.html] 与小车进行串口通信
+
+<h2>设计过程中遇到的问题</h2>
+### 1.数码管焊接
+
+最初设计使用HC74595模块驱动数码管[^3 ：   https://bbs.elecfans.com/m/jishu_2135156_1_1.html] 显示，如下图
+
+ ![](nixie_1.jpg)
+ ![](nixie_2.jpg)
+可惜因为焊接中存在的问题，导致数码管显示有误，时间原因更换为io口直连数码管。
+
+### 2.红外循迹
+红外模块[^4 ：   https://blog.csdn.net/qq_46554815/article/details/113477770] 在检测到黑线时，会向单片机发送脉冲，我通过读取引脚信号来控制电机反转来达到转弯的效果，后续通过减少检测到黑线时电机的转速延长小车反应时间，取得了更好的效果。然而后续的测试中出现了车轮卡住等现象，已证实有一点原因为单片机输出pwm波驱动能力不足，但解决该问题后仍出现车轮卡住现象，推测电机与车轮链接处齿轮卡住，由于时间和条件限制，暂时搁置。
+
+### 3.蓝牙调试
+在调试蓝牙模块时由于对c语言了解不够深入，出现了数据类型不匹配的情况,当时将发送的指令更换为a解决了问题，后续证实发送的数据实为字符型，如将下图中的判断条件改为
+
+```c
+if(usart_Re=='1')
+```
+即可正常接收指令。
+ ![](bluetooth.png)
+
+## CubeMX工程分析
+
+![](cubemx.png)
+
+PA2和PA11口通过L298N模块[^5 ：   https://www.toutiao.com/i6673259386808304140/?wid=1634455097691]   
+输出PWM波[^6 ：   https://blog.csdn.net/qq_45467083/article/details/108510283 ]控制电机转速
+
+PA4接收测速模块信号产生外部中断
+
+PA5和PA6控制数码管位选
+
+PB0、PB1、PB5、PB6控制电机转动模式(正转、反转或静止)
+
+PB8、PB9获取红外模块传回的信息
+
+PC4-PC11控制数码管段选
+
+## 代码与功能分析
+
+### 1.测速
+
+```c
+int count=0;
+int r=0;
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if(GPIO_Pin==GPIO_PIN_4)
+  {
+	  count++;
+  }
+}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	r=count;
+	count=0;
+}
+```
+测速部分采用外部中断与定时器中断来获取小车行驶速度，码盘每经过测速模块一格，产生外部中断，计数加一，一秒后通过定时器中断获取计数，并将计数归零，此数即为车轮一秒钟内所转过码盘的格数。
+
+### 2.数码管显示
+
+```c
+void GPIO_Write(GPIO_TypeDef* GPIOx, uint16_t PortVal)
+{
+  /* Check the parameters */
+  assert_param(IS_GPIO_ALL_PERIPH(GPIOx));
+  
+  GPIOx->ODR = PortVal;
+}
+uint16_t table[]={0x0c00,0x0f90,0x0a40,0x0b00,0x0990,0x0920,0x0820,0x0f80,0x0800,0x0900};
+void Show(int i)
+{
+	switch(i)
+	{
+		case 0:{GPIO_Write(GPIOC,table[0]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 1:{GPIO_Write(GPIOC,table[1]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 2:{GPIO_Write(GPIOC,table[2]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 3:{GPIO_Write(GPIOC,table[3]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 4:{GPIO_Write(GPIOC,table[4]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 5:{GPIO_Write(GPIOC,table[5]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 6:{GPIO_Write(GPIOC,table[6]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 7:{GPIO_Write(GPIOC,table[7]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 8:{GPIO_Write(GPIOC,table[8]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+		case 9:{GPIO_Write(GPIOC,table[9]);HAL_Delay(10);GPIO_Write(GPIOC,0xffff);break;}
+    }
+}
+void wei(int WEI)
+{
+	if(WEI==1)
+	{
+		HAL_GPIO_TogglePin(GPIOA,GPIO_PIN_5);
+	}
+	if(WEI==2)
+	{
+		HAL_GPIO_TogglePin(GPIOA,GPIO_PIN_6);
+	}
+}
+void ShowSpeed()
+{
+	int shi=r/10;
+	int ge=r%10;
+	wei(1);
+	Show(shi);
+	wei(1);
+	wei(2);
+	Show(ge);
+	wei(2);	
+}
+```
+
+数码管显示采用动态显示，GPIO_Write函数借用之前某学长完成的函数。
+
+### 3.红外循迹
+
+```c
+	  if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)==1)
+		{
+			__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 15-1);
+			__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 15-1);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_0);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_1);
+			HAL_Delay(50);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_0);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_1);
+			__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 30-1);
+			__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 30-1);
+		}
+
+	  if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_9)==1)
+		{
+			__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 15-1);
+			__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 15-1);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_5);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
+			HAL_Delay(50);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_5);
+			HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
+			__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 30-1);
+			__HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 30-1);
+		}
+```
+
+读取引脚电平状态判断小车是否越线并转弯
+
+
+### 4.蓝牙
+
+```c
+uint8_t usart1_Re;
+uint8_t data1='a';
+uint8_t data2='b';
+uint8_t data3='c';
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) 
+{
+	if(usart1_Re==data1)
+	{
+		__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 23-1);
+	    __HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 41-1);
+		HAL_UART_Transmit_IT(&huart1,&usart1_Re,1);
+	}
+	else if(usart1_Re==data2)
+	{
+		__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 41-1);
+	    __HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 23-1);
+	    HAL_UART_Transmit_IT(&huart1,&usart1_Re,1);
+	}
+	else if(usart1_Re==data3)
+	{
+		__HAL_TIM_SetCompare(&htim2,TIM_CHANNEL_4, 30-1);
+	    __HAL_TIM_SetCompare(&htim1,TIM_CHANNEL_4, 30-1);
+	}
+
+    HAL_UART_Receive_IT(&huart1, &usart1_Re, 1);
+}
+```
+
+串口通过蓝牙模块接收到消息后的处理函数，控制小车转弯或直行。
+
+[^1]: 
